@@ -22,8 +22,8 @@ export function TradeHistory() {
     applyFilters();
   }, [trades, filterDirection, filterOutcome]);
 
-  const loadTrades = () => {
-    const allTrades = tradeStorage.getTrades();
+  const loadTrades = async () => {
+    const allTrades = await tradeStorage.getTrades();
     setTrades(allTrades.reverse());
   };
 

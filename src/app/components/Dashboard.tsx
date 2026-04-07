@@ -12,11 +12,15 @@ export function Dashboard() {
   const [allTrades, setAllTrades] = useState<Trade[]>([]);
 
   useEffect(() => {
-    const trades = tradeStorage.getTrades();
-    const calculatedStats = tradeStorage.calculateStats(trades);
-    setStats(calculatedStats);
-    setRecentTrades(trades.slice(-5).reverse());
-    setAllTrades(trades);
+    const loadData = async () => {
+      const trades = await tradeStorage.getTrades();
+      const calculatedStats = tradeStorage.calculateStats(trades);
+      setStats(calculatedStats);
+      setRecentTrades(trades.slice(-5).reverse());
+      setAllTrades(trades);
+    };
+    
+    loadData();
   }, []);
 
   if (!stats) {

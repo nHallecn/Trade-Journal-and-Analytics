@@ -82,9 +82,12 @@ export function AddTrade() {
       setupImage: setupImage || undefined,
     };
 
-    tradeStorage.addTrade(trade);
-    toast.success('Trade added successfully!');
-    navigate('/');
+    tradeStorage.addTrade(trade).then(() => {
+      toast.success('Trade added successfully!');
+      navigate('/');
+    }).catch((error) => {
+      toast.error(error.message || 'Failed to add trade');
+    });
   };
 
   const handleChange = (field: string, value: string) => {

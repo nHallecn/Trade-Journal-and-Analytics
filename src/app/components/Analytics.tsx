@@ -13,18 +13,25 @@ export function Analytics() {
   const [winLossData, setWinLossData] = useState<any[]>([]);
   const [symbolData, setSymbolData] = useState<any[]>([]);
   const [strategyData, setStrategyData] = useState<any[]>([]);
+  const [dailyPLData, setDailyPLData] = useState<any[]>([]);
+  const [winStreakData, setWinStreakData] = useState<any[]>([]);
+  const [hourlyPerformance, setHourlyPerformance] = useState<any[]>([]);
   const [outcomeFilter, setOutcomeFilter] = useState<string>('all');
   const [strategyFilter, setStrategyFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('date');
   const [availableStrategies, setAvailableStrategies] = useState<string[]>([]);
 
   useEffect(() => {
-    const trades = tradeStorage.getTrades();
-    setAllTrades(trades);
+    const loadTrades = async () => {
+      const trades = await tradeStorage.getTrades();
+      setAllTrades(trades);
+      
+      // Get unique strategies
+      const strategies = [...new Set(trades.map(t => t.strategy || 'No Strategy'))];
+      setAvailableStrategies(strategies);
+    };
     
-    // Get unique strategies
-    const strategies = [...new Set(trades.map(t => t.strategy || 'No Strategy'))];
-    setAvailableStrategies(strategies);
+    loadTrades();
   }, []);
 
   useEffect(() => {
@@ -106,6 +113,54 @@ export function Analytics() {
       .map(([strategy, pl]) => ({ strategy, profitLoss: parseFloat(pl.toFixed(2)) }))
       .sort((a, b) => b.profitLoss - a.profitLoss);
     setStrategyData(strategyChartData);
+
+    // Daily P/L
+    const dailyPLMap = new Map<string, number>();
+    trades.forEach(trade => {
+      const date = new Date(trade.date);
+      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const current = dailyPLMap.get(dateKey) || 0;
+      dailyPLMap.set(dateKey, current + trade.profitLoss);
+    });
+    const dailyPLChartData = Array.from(dailyPLMap.entries())
+      .map(([date, pl]) => ({ date, profitLoss: parseFloat(pl.toFixed(2)) }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    setDailyPLData(dailyPLChartData);
+
+    // Win Streak
+    let currentStreak = 0;
+    let maxStreak = 0;
+    trades.forEach(trade => {
+      if (trade.profitLoss > 0) {
+        currentStreak++;
+        if (currentStreak > maxStreak) {
+          maxStreak = currentStreak;
+        }
+      } else {
+        currentStreak = 0;
+      }
+    });
+    setWinStreakData([{ name: 'Max Win Streak', value: maxStreak, color: '#10b981' }]);
+
+    // Hourly Performance
+    const hourlyPerformanceMap = new Map<string, { trades: number, wins: number, losses: number, profitLoss: number }>();
+    trades.forEach(trade => {
+      const date = new Date(trade.date);
+      const hourKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}`;
+      const current = hourlyPerformanceMap.get(hourKey) || { trades: 0, wins: 0, losses: 0, profitLoss: 0 };
+      current.trades++;
+      if (trade.profitLoss > 0) {
+        current.wins++;
+      } else if (trade.profitLoss < 0) {
+        current.losses++;
+      }
+      current.profitLoss += trade.profitLoss;
+      hourlyPerformanceMap.set(hourKey, current);
+    });
+    const hourlyPerformanceChartData = Array.from(hourlyPerformanceMap.entries())
+      .map(([hour, data]) => ({ hour, ...data }))
+      .sort((a, b) => new Date(a.hour).getTime() - new Date(b.hour).getTime());
+    setHourlyPerformance(hourlyPerformanceChartData);
   };
 
   if (allTrades.length === 0) {
@@ -300,6 +355,101 @@ export function Analytics() {
                       month.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
                       ${month.profitLoss.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Daily P/L */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily Profit/Loss</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={dailyPLData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip 
+                formatter={(value: number) => `$${value.toFixed(2)}`}
+                labelFormatter={(label) => `Date: ${label}`}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="profitLoss" 
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                name="P/L"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Win Streak */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Win Streak</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={winStreakData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, value }) => `${name}: ${value}`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {winStreakData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Hourly Performance */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Hourly Performance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2">Hour</th>
+                  <th className="text-right py-2">Trades</th>
+                  <th className="text-right py-2">Wins</th>
+                  <th className="text-right py-2">Losses</th>
+                  <th className="text-right py-2">Win Rate</th>
+                  <th className="text-right py-2">P/L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hourlyPerformance.map((hour, index) => (
+                  <tr key={index} className="border-b">
+                    <td className="py-2">{hour.hour}</td>
+                    <td className="text-right">{hour.trades}</td>
+                    <td className="text-right text-green-600">{hour.wins}</td>
+                    <td className="text-right text-red-600">{hour.losses}</td>
+                    <td className="text-right">{hour.trades > 0 ? ((hour.wins / hour.trades) * 100).toFixed(1) : 0}%</td>
+                    <td className={`text-right font-semibold ${
+                      hour.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      ${hour.profitLoss.toFixed(2)}
                     </td>
                   </tr>
                 ))}
